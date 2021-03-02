@@ -1,5 +1,4 @@
 #!/bin/sh
-exec 0<./numbers.txt
 echo There were $# parameters passed.
 for param in "$@"
 do
