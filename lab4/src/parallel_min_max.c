@@ -15,23 +15,31 @@
 #include "find_min_max.h"
 #include "utils.h"
 
+void Killing(int sig){
+    kill(-1, SIGKILL);
+    printf("TIMEOUT\n");
+}
+
 int main(int argc, char **argv) {
   int seed = -1;
   int array_size = -1;
   int pnum = -1;
   bool with_files = false;
+  int timeout=-1;
 
   while (true) {
     int current_optind = optind ? optind : 1;
-
+    
     static struct option options[] = {{"seed", required_argument, 0, 0},
                                       {"array_size", required_argument, 0, 0},
                                       {"pnum", required_argument, 0, 0},
                                       {"by_files", no_argument, 0, 'f'},
+                                      {"timeout", required_argument, 0, 't'},
                                       {0, 0, 0, 0}};
 
     int option_index = 0;
     int c = getopt_long(argc, argv, "f", options, &option_index);
+    
 
     if (c == -1) break;
 
@@ -83,6 +91,15 @@ int main(int argc, char **argv) {
       case '?':
         break;
 
+      case 't':
+        timeout=atoi(optarg);
+        if(!timeout)
+          {
+            printf("Error: timeout value\n");
+            return -1;
+          }
+        break;
+
       default:
         printf("getopt returned character code 0%o?\n", c);
     }
@@ -105,8 +122,9 @@ int main(int argc, char **argv) {
 
   struct timeval start_time;
   gettimeofday(&start_time, NULL);
-  int pipefd[2];
+  int pipefd[2], n;
   pipe(pipefd);
+
 
   for (int i = 0; i < pnum; i++) {
     pid_t child_pid = fork();
@@ -115,7 +133,8 @@ int main(int argc, char **argv) {
       active_child_processes += 1;
       if (child_pid == 0) {
         // child process
-        struct MinMax min_max = GetMinMax(array, 0, array_size);//!!!!!
+        n = array_size / pnum;
+        struct MinMax min_max = GetMinMax(array, (unsigned int)i*n, (unsigned int)(i+1)*n);
 
         // parallel somehow
 
@@ -145,6 +164,9 @@ int main(int argc, char **argv) {
       return 1;
     }
   }
+
+  signal(SIGALRM, Killing);
+  alarm((unsigned)timeout);
 
   while (active_child_processes > 0) {
     // your code here
