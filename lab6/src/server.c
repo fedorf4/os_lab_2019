@@ -12,6 +12,7 @@
 #include <sys/types.h>
 
 #include "pthread.h"
+#include "MultModul.h"
 
 struct FactorialArgs {
   uint64_t begin;
@@ -19,23 +20,17 @@ struct FactorialArgs {
   uint64_t mod;
 };
 
-uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
-  uint64_t result = 0;
-  a = a % mod;
-  while (b > 0) {
-    if (b % 2 == 1)
-      result = (result + a) % mod;
-    a = (a * 2) % mod;
-    b /= 2;
-  }
-
-  return result % mod;
-}
+pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
 uint64_t Factorial(const struct FactorialArgs *args) {
   uint64_t ans = 1;
-
+  uint64_t i;
   // TODO: your code here
+  for (i = args->begin; i <= args->end; i++)
+  {
+    ans *= i % args->mod;
+  }
+  ans %= args->mod;
 
   return ans;
 }
@@ -68,10 +63,20 @@ int main(int argc, char **argv) {
       case 0:
         port = atoi(optarg);
         // TODO: your code here
+        if (port <=0)
+        {
+          printf("port must be positive!\n");
+          return 1;
+        }
         break;
       case 1:
         tnum = atoi(optarg);
         // TODO: your code here
+         if (tnum <=0)
+        {
+          printf("tnum must be positive!\n");
+          return 1;
+        }
         break;
       default:
         printf("Index %d is out of options\n", option_index);
@@ -132,6 +137,7 @@ int main(int argc, char **argv) {
     while (true) {
       unsigned int buffer_size = sizeof(uint64_t) * 3;
       char from_client[buffer_size];
+      //Получаем сообщение из сокета клиента в from_client
       int read = recv(client_fd, from_client, buffer_size, 0);
 
       if (!read)
@@ -147,38 +153,58 @@ int main(int argc, char **argv) {
 
       pthread_t threads[tnum];
 
-      uint64_t begin = 0;
-      uint64_t end = 0;
-      uint64_t mod = 0;
+     //Разбиваем информацию от клиента
+      unsigned long long begin = 0;
+      unsigned long long end = 0;
+      unsigned long long mod = 0;
       memcpy(&begin, from_client, sizeof(uint64_t));
       memcpy(&end, from_client + sizeof(uint64_t), sizeof(uint64_t));
       memcpy(&mod, from_client + 2 * sizeof(uint64_t), sizeof(uint64_t));
 
       fprintf(stdout, "Receive: %llu %llu %llu\n", begin, end, mod);
 
-      struct FactorialArgs args[tnum];
-      for (uint32_t i = 0; i < tnum; i++) {
-        // TODO: parallel somehow
-        args[i].begin = 1;
-        args[i].end = 1;
-        args[i].mod = mod;
+    uint64_t number = end - begin;
+    if (number<tnum)
+        tnum = number;
+    int part = number / tnum;
 
-        if (pthread_create(&threads[i], NULL, ThreadFactorial,
-                           (void *)&args[i])) {
+      struct FactorialArgs args[tnum];
+      uint32_t i;
+      for (i = 0; i < tnum; i++) {
+        // TODO: parallel somehow
+        args[i].begin = begin + i*part;
+        args[i].mod = mod;
+        if (i != 0)
+        {
+          args[i].begin++;
+        }
+        if (i == (tnum - 1))
+        {
+          args[i].end = end;
+        }
+        else
+        {
+          args[i].end = begin + (i+1)*part;
+        }
+        //Создаём потоки с функцией подсчёта факториала
+        if (pthread_create(&threads[i], NULL, ThreadFactorial, (void *)&args[i])) {
           printf("Error: pthread_create failed!\n");
           return 1;
         }
       }
 
-      uint64_t total = 1;
-      for (uint32_t i = 0; i < tnum; i++) {
+      unsigned long long total = 1;
+      for (i = 0; i < tnum; i++) {
+        pthread_mutex_lock(&mut);
         uint64_t result = 0;
         pthread_join(threads[i], (void **)&result);
         total = MultModulo(total, result, mod);
+        pthread_mutex_unlock(&mut);
       }
 
       printf("Total: %llu\n", total);
 
+      //Отправляем сообщения в сокет клиента
       char buffer[sizeof(total)];
       memcpy(buffer, &total, sizeof(total));
       err = send(client_fd, buffer, sizeof(total), 0);
