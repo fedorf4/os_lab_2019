@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     pid_t pid1;
     pid_t pid2;
         pid = fork();
-        if (pid > 0) {   /* I am the parent, create more children */
+        if (pid > 0) {   /* Create TCP server */
         //if (i==0)
         //{
 
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
                             int udp_port =SERV_PORT+i+1;
                             char buffer[sizeof(udp_port)];
                             memcpy(buffer, &udp_port, sizeof(udp_port));
-                            int err = send(cfd, buffer, sizeof(buffer), 0);
+                            int err = send(cfd, buffer, sizeof(buffer), 0);   //Send the port of a free udp server to the client to work with it.
                             if (err < 0) {
                                 fprintf(stderr, "Can't send data to client\n");
                                 break;
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
                 close(cfd);
             }
         //}
-        } else if (pid == 0) { /* I am a child, get to work */
+        } else if (pid == 0) { /* Create 4 UDP server with different ports */
         int idx;
         pid1 = fork();
         if (pid1>0)
