@@ -8,7 +8,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define SERV_PORT 13001
+
+
+#define SERV_PORT 30001
 #define BUFSIZE 100
 #define SADDR struct sockaddr
 #define SLEN sizeof(struct sockaddr_in)
@@ -21,14 +23,18 @@ int main(int argc, char **argv) {
     struct sockaddr_in servaddr;
     struct sockaddr_in cliaddr;
     char buf[BUFSIZE];
+    char mesg[BUFSIZE];
     int serv_busy[4];
     for (int i=0;i<4;i++)
         serv_busy[i]=0;
 
-    pid_t pid[4];
-    for (int i = 0; i < 4; ++i) {
-        pid[i] = fork();
-        if (pid[i] > 0) {   /* I am the parent, create more children */
+    pid_t pid;
+    pid_t pid1;
+    pid_t pid2;
+        pid = fork();
+        if (pid > 0) {   /* I am the parent, create more children */
+        //if (i==0)
+        //{
 
               if ((lfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
                 perror("socket");
@@ -38,7 +44,7 @@ int main(int argc, char **argv) {
             memset(&servaddr, 0, kSize);
             servaddr.sin_family = AF_INET;
             servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-            servaddr.sin_port = htons(SERV_PORT+i);
+            servaddr.sin_port = htons(SERV_PORT);
 
             if (bind(lfd, (SADDR *)&servaddr, kSize) < 0) {
                 perror("bind");
@@ -52,7 +58,6 @@ int main(int argc, char **argv) {
 
             while (1) {
                 unsigned int clilen = kSize;
-
                 if ((cfd = accept(lfd, (SADDR *)&cliaddr, &clilen)) < 0) {
                 perror("accept");
                 exit(1);
@@ -60,21 +65,22 @@ int main(int argc, char **argv) {
                 printf("connection established\n");
 
                 while ((nread = read(cfd, buf, BUFSIZE)) > 0) {
-                write(1, &buf, nread);
+                //write(1, &buf, nread);
                 char* st = (char*)malloc(strlen(buf)+1);
                 strcpy(st, buf);
-                printf("%s\n", st);
-                printf("compare: %d, %d, %d\n", strcmp(st, "0"), strlen(st), strlen("0"));
-                if (atoi(st)==0)
+                memset(&buf[0], '\0', sizeof(buf));
+                if (strcmp(st, "create\n")==0)
                 {
                     printf("create request\n");
                     for (int i=0;i<4;i++)
                     {
                         if (serv_busy[i]==0)
                         {
-                            char buffer[sizeof(i)];
-                            memcpy(buffer, &i, sizeof(i));
-                            int err = send(cfd, buffer, sizeof(i), 0);
+                            serv_busy[i]=1;
+                            int udp_port =SERV_PORT+i+1;
+                            char buffer[sizeof(udp_port)];
+                            memcpy(buffer, &udp_port, sizeof(udp_port));
+                            int err = send(cfd, buffer, sizeof(buffer), 0);
                             if (err < 0) {
                                 fprintf(stderr, "Can't send data to client\n");
                                 break;
@@ -84,7 +90,7 @@ int main(int argc, char **argv) {
 
                     }
                 }
-                if (strcmp(st, "free")==0)
+                if (strcmp(st, "free\n")==0)
                 {
                     printf("free request\n");
                     for (int i=0;i<4;i++)
@@ -94,6 +100,7 @@ int main(int argc, char **argv) {
                         break;
                     }
                 }
+                free(st);
 
                 }
 
@@ -103,30 +110,52 @@ int main(int argc, char **argv) {
                 }
                 close(cfd);
             }
-        } else if (pid[i] == 0) { /* I am a child, get to work */
+        //}
+        } else if (pid == 0) { /* I am a child, get to work */
+        int idx;
+        pid1 = fork();
+        if (pid1>0)
+            idx =0;
+        else idx = 1;
+        pid2 = fork();
+        if (pid2>0)
+            idx =idx*2+1;
+        else idx = (idx+1)*2;
         int sockfd, n;
-        struct sockaddr_in servaddr[4];
+        struct sockaddr_in servaddr;
         struct sockaddr_in cliaddr;
         if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
             perror("socket problem");
             exit(1);
         }
         memset(&servaddr, 0, SLEN);
-        servaddr[i].sin_family = AF_INET;
-        servaddr[i].sin_addr.s_addr = htonl(INADDR_ANY);
-        servaddr[i].sin_port = htons(SERV_PORT+i);
+        servaddr.sin_family = AF_INET;
+        servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+        servaddr.sin_port = htons(SERV_PORT+idx);
 
-        if (bind(sockfd, (SADDR *)&servaddr[i], SLEN) < 0) {
+        if (bind(sockfd, (SADDR *)&servaddr, SLEN) < 0) {
             perror("bind problem");
             exit(1);
         }
-        printf("UDP SERVER starts...\n");
+        printf("UDP SERVER %d starts...\n", SERV_PORT+idx);
+        unsigned int len = SLEN;
+        while(1)
+        {
+        if ((n = recvfrom(sockfd, mesg, BUFSIZE, 0, (SADDR *)&cliaddr, &len)) < 0) {
+        perror("recvfrom");
+        exit(1);
+        }
+        mesg[n] = 0;
+
+        printf("UDP SERVER %d REQUEST %s  \n",SERV_PORT+idx, mesg);
            // break;
+        }
+
         } else {
             printf("fork error\n");
             exit(1);
         }
-    }
+
     
 
 }

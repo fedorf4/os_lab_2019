@@ -11,8 +11,10 @@
 //#define BUFSIZE 100
 #define SADDR struct sockaddr
 #define SIZE sizeof(struct sockaddr_in)
+#define SLEN sizeof(struct sockaddr_in)
 
 int main(int argc, char **argv) {
+    int sockfd, n;
     int fd;
     int nread;
     struct sockaddr_in servaddr;
@@ -97,24 +99,53 @@ int main(int argc, char **argv) {
   }
 while(1)
 {
-  write(1, "Input message to send\n", 22);
-  while ((nread = read(0, buf, BUFSIZE)) > 0) {
-    if (write(fd, buf, nread) < 0) {
-      perror("write");
-      exit(1);
+    memset(&buf[0], '\0', sizeof(buf));
+    write(1, "\nInput message to send to TCP server\n", 37);
+    while ((nread = read(0, buf, BUFSIZE)) > 0) {
+        if (write(fd, buf, nread) < 0) {
+        perror("write");
+        exit(1);
+        }
+        break;
     }
-    break;
-  }
-
-    char response[sizeof(uint64_t)];
+    if (strcmp(buf, "free\n")==0)
+        continue;
+    char response[sizeof(int)];
     if (recv(fd, response, sizeof(response), 0) < 0) {
         fprintf(stderr, "Recieve failed\n");
         exit(1);
     }
     int server_answer = -1;
     memcpy(&server_answer, response, sizeof(int));
-    printf("%d", server_answer);
+    printf("%d\n", server_answer);
+
+    char sendline[BUFSIZE];
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(server_answer);
+
+    if (inet_pton(AF_INET, ip, &servaddr.sin_addr) < 0) {
+        perror("inet_pton problem");
+        exit(1);
+    }
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("socket problem");
+        exit(1);
+    }
+
+    write(1, "Enter string\n", 13);
+
+  while ((n = read(0, sendline, BUFSIZE)) > 0) {
+    if (sendto(sockfd, sendline, n, 0, (SADDR *)&servaddr, SLEN) == -1) {
+      perror("sendto problem");
+      exit(1);
+    }
+    break;
+  }
+
+    
 }
   close(fd);
   exit(0);
+
 }
