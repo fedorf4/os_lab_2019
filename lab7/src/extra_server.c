@@ -35,7 +35,6 @@ int main(int argc, char **argv) {
         if (pid > 0) {   /* Create TCP server */
         //if (i==0)
         //{
-
               if ((lfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
                 perror("socket");
                 exit(1);
